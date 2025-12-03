@@ -1,36 +1,39 @@
 {
-  "name": "krypto-kings",
-  "version": "0.1.0",
-  "description": "Krypto Kings - Built for Kings 👑",
-  "homepage": "https://kryptokings.app",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/brandonlacoste9-tech/krypttrac.git"
-  },
+  "name": "colony-os-magnum-opus",
+  "version": "1.0.0",
+  "description": "The Dreaming Hive - A unified command interface for the distributed digital organism",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.53",
-    "@anthropic-ai/sdk": "^0.38.0",
-    "lucide-react": "^0.554.0",
-    "next": "^14.2.0",
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "next": "14.2.15",
+    "@google/generative-ai": "^0.17.1",
+    "lucide-react": "^0.263.1"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "autoprefixer": "^10.4.20",
-    "eslint": "^8.57.1",
-    "eslint-config-next": "^14.2.33",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.17",
-    "typescript": "^5"
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.6.0",
+    "@testing-library/react": "^16.0.1",
+    "@testing-library/jest-dom": "^6.6.3",
+    "tailwindcss": "^3.4.0",
+    "postcss": "^8.4.0",
+    "autoprefixer": "^10.4.0",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.15",
+    "jsdom": "^24.0.0",
+    "playwright": "^1.41.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
