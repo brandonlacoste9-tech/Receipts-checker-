@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "colony-os-magnum-opus",
   "version": "1.0.0",
   "description": "The Dreaming Hive - A unified command interface for the distributed digital organism",
@@ -13,24 +13,24 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "next": "14.2.15",
+    "next": "14.2.32",
     "@google/generative-ai": "^0.17.1",
     "lucide-react": "^0.263.1"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types-node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "typescript": "^5.0.0",
-    "vitest": "^1.6.0",
+    "vitest": "^4.0.13",
     "@testing-library/react": "^16.0.1",
     "@testing-library/jest-dom": "^6.6.3",
     "tailwindcss": "^3.4.0",
     "postcss": "^8.4.0",
     "autoprefixer": "^10.4.0",
     "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.15",
-    "jsdom": "^24.0.0",
+    "eslint-config-next": "14.2.32",
+    "jsdom": "^25.0.1",
     "playwright": "^1.41.0"
   },
   "engines": {
