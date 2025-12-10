@@ -1,0 +1,97 @@
+name: Cortex Observer
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch telemetry and health
+        id: fetch
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sS https://adgenxai.pro/.netlify/functions/webhook-telemetry > telemetry.json
+          curl -sS https://adgenxai.pro/.netlify/functions/health            > health.json
+          # sanity: lengths (helps debug failures in logs)
+          echo "telemetry-bytes=$(wc -c < telemetry.json)"
+          echo "health-bytes=$(wc -c < health.json)"
+          {
+            echo "telemetry<<EOF"
+            cat telemetry.json
+            echo "EOF"
+            echo "health<<EOF"
+            cat health.json
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post status to tracking issue
+        uses: actions/github-script@v7
+        env:
+          TELEMETRY: ${{ steps.fetch.outputs.telemetry }}
+          HEALTH:    ${{ steps.fetch.outputs.health }}
+        with:
+          script: |
+            const safe = (s) => { try { return JSON.parse(s ?? ''); } catch { return {}; } };
+            const clip = (t, n=65000) => (t || '').slice(0, n);
+
+            const telemetry = safe(process.env.TELEMETRY);
+            const health    = safe(process.env.HEALTH);
+            const now = new Date().toISOString();
+
+            const body = `## 🧠 Cortex Status Report
+
+**Timestamp:** ${now}
+
+### Health
+\`\`\`json
+${clip(JSON.stringify(health, null, 2))}
+\`\`\`
+
+### Telemetry
+\`\`\`json
+${clip(JSON.stringify(telemetry, null, 2))}
+\`\`\`
+
+*Automated observation — no actions taken*`;
+
+            const res = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'cortex-status',
+              state: 'open',
+              per_page: 1
+            });
+
+            if (!res.data.length) {
+              core.warning('No cortex-status issue found — creating one.');
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '🧠 Sensory Cortex — Agent Mode Status Tracker',
+                labels: ['cortex-status'],
+                body: 'Tracking hourly telemetry.'
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: created.data.number,
+                body
+              });
+              core.info(`✅ Posted to new issue #${created.data.number}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: res.data[0].number,
+                body
+              });
+              core.info(`✅ Posted to issue #${res.data[0].number}`);
+            }

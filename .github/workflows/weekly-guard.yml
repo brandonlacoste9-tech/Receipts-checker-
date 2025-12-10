@@ -1,0 +1,18 @@
+name: Weekly Guard
+on:
+  schedule:
+    - cron: "0 14 * * 1-5"  # 10:00 AM America/New_York on weekdays
+  workflow_dispatch:
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm ci || true
+      - name: Weekly Non-Decreasing Guard
+        env:
+          ALLOW_WEEKLY_DROP: "false"
+        run: npm run guard:weekly

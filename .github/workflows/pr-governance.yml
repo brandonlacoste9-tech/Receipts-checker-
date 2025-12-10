@@ -1,0 +1,220 @@
+name: PR Governance
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [ main ]
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: npm ci || true
+
+      # 1) Non-decreasing vs last Friday
+      - name: Weekly Non-Decreasing Guard
+        env:
+          ALLOW_WEEKLY_DROP: "false"
+        run: npm run guard:weekly
+
+      # 2) Milestones delta table
+      - name: Milestones Delta
+        id: delta
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: |
+          node scripts/milestones-delta.js | tee delta.md
+          echo 'table<<EOF' >> $GITHUB_OUTPUT
+          cat delta.md >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+
+      # --- Flaky changes: table + JSON for issues ---
+      - name: Roadmap PR Governance (dotnet msbuild)
+        run: dotnet msbuild /t:RoadmapPR
+
+      - name: Comment Flaky Delta
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          recreate: true
+          header: roadmap-flaky
+          path: flaky-delta.md
+
+      - name: Open issues for worsening flakies
+        if: ${{ success() || failure() }}  # run regardless; script will no-op if no offenders
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('flaky-offenders.json')) {
+              core.info('No offenders file found, skipping.');
+              return;
+            }
+            const data = JSON.parse(fs.readFileSync('flaky-offenders.json','utf8'));
+            const offenders = data.offenders || [];
+            if (!offenders.length) {
+              core.info('No offenders above threshold, skipping issues.');
+              return;
+            }
+            for (const o of offenders) {
+              const title = `Flaky Test: ${o.file} (+${o.delta})`;
+              const labels = ['flaky','ci', `owner:${o.owner_label || 'unknown'}`];
+              const body = [
+                `Detected increased flakiness for \`${o.file}\``,
+                ``,
+                `- Base failures: **${o.base}**`,
+                `- Head failures: **${o.head}**`,
+                `- Delta: **+${o.delta}**`,
+                `- Owner: **${o.owner_label || '—'}**`,
+                ``,
+                `**Dashboard:** docs/roadmap.html`,
+                `**History:** docs/burndown-history.md`,
+                ``,
+                `_Opened automatically by PR Governance_`
+              ].join('\n');
+
+              // Dedupe: if an open issue already exists for this file, comment instead of creating a new one
+              const { data: existing } = await github.rest.issues.listForRepo({
+                owner: context.repo.owner, repo: context.repo.repo,
+                state: 'open', labels: labels.join(','),
+                per_page: 100
+              });
+              const match = existing.find(i => i.title.includes(`Flaky Test: ${o.file}`));
+              if (match) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: match.number,
+                  body: `Update: Δ **+${o.delta}** (now ${o.head} total).`
+                });
+                continue;
+              }
+
+              const issue = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels
+              });
+              if (o.owner_github) {
+                try {
+                  await github.rest.issues.addAssignees({
+                    owner: context.repo.owner, repo: context.repo.repo,
+                    issue_number: issue.data.number, assignees: [o.owner_github]
+                  });
+                } catch (e) {
+                  core.warning(`Could not assign @${o.owner_github}: ${e.message}`);
+                }
+              }
+            }
+
+      # Auto-label PR if flaky offenders detected
+      - name: Label PR if flaky offenders
+        if: always()
+        run: |
+          result=$(node -e "const fs=require('fs'); if(fs.existsSync('flaky-offenders.json')){ const d=JSON.parse(fs.readFileSync('flaky-offenders.json')); process.stdout.write(d.offenders.length > 0 ? 'true' : 'false'); } else process.stdout.write('false');")
+          echo "roadmap-blocked=$result" >> $GITHUB_OUTPUT
+        id: check_flaky
+      - name: Apply roadmap-blocked label
+        if: steps.check_flaky.outputs.roadmap-blocked == 'true'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: roadmap-blocked
+
+      # 3) Sticky PR comment with results
+      - name: Comment (Weekly Guard + Delta)
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          recreate: true
+          header: pr-governance
+          message: |
+            **PR Governance Report**
+            - Base: `${{ github.base_ref }}`
+            - Head: `${{ github.head_ref }}`
+            - Weekly Guard: ${{ job.status == 'success' && '✅ Passed' || '❌ Failed (see logs)' }}
+
+            **Milestone Changes**
+            ${{ steps.delta.outputs.table }}
+
+      # Auto-label PR if guard fails
+      - name: Label PR if guard fails
+        if: failure()
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: needs-roadmap-update
+
+      # Ensure label exists
+      - name: Ensure "roadmap-blocked" label exists
+        if: always()
+        uses: peter-evans/create-or-update-label@v4
+        with:
+          name: roadmap-blocked
+          color: 000000
+          description: PR blocked by flaky-test regression
+
+      # Slack alert on roadmap failure
+      - name: Slack alert on roadmap failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          test -n "$SLACK_WEBHOOK_URL" || { echo "No webhook; skipping"; exit 0; }
+          pr="${{ github.event.pull_request.number }}"
+          curl -X POST -H 'Content-type: application/json' \
+            --data "$(jq -n --arg pr "$pr" --arg url "${{ github.server_url }}/${{ github.repository }}/pull/$pr" \
+            '{text: "🚨 RoadmapPR failed: flaky offenders detected in PR #\($pr).\n\($url)\nSee flaky-delta.md for details."}')" \
+            "$SLACK_WEBHOOK_URL"
+
+      # Remove roadmap-blocked label on pass
+      - name: Remove roadmap-blocked label on pass
+        if: success()
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: roadmap-blocked
+
+      # Full auto-unblock: comment delta and close resolved flaky issues
+      - name: Auto-unblock and close resolved issues
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const pr = ${{ github.event.pull_request.number }};
+            const deltaMd = fs.existsSync('flaky-delta.md') ? fs.readFileSync('flaky-delta.md', 'utf8') : '_No changes._';
+
+            // Comment on PR
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+              body: `✅ **Roadmap Governance Passed**\n\n${deltaMd}`
+            });
+
+            // Find and close open flaky issues for this PR
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['flaky']
+            });
+            for (const issue of issues) {
+              if (issue.body && issue.body.includes(`PR: #${pr}`)) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed'
+                });
+              }
+            }

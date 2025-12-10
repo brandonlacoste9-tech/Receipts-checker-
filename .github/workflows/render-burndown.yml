@@ -1,0 +1,88 @@
+name: Render Burndown
+on:
+  push:
+    paths:
+      - "docs/milestones.json"
+      - "scripts/render-burndown.js"
+  workflow_dispatch:
+  schedule:
+    - cron: "0 14 * * 1-5" # 10:00 AM EDT/EST on weekdays
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci || true
+      - run: npm run render:burndown
+        env:
+          TZ: America/New_York
+      - run: npm run readme:gov
+      - name: Commit README governance line
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "ci-bot"
+            git config user.email "ci@example.com"
+            git add README.md
+            git commit -m "docs: update README governance line [skip ci]"
+            git push
+          fi
+      - name: Export open flaky issues by owner
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'flaky', per_page: 100
+            });
+            const rows = open.map(i => ({
+              number: i.number,
+              title: i.title,
+              url: i.html_url,
+              labels: i.labels.map(l => l.name),
+              owner: (i.labels.find(l => String(l.name).startsWith('owner:'))?.name || 'owner:unknown').replace(/^owner:/,''),
+              created_at: i.created_at
+            }));
+            const fs = require('fs');
+            fs.mkdirSync('docs', { recursive: true });
+            fs.writeFileSync('docs/flaky-issues.json', JSON.stringify({ issues: rows }, null, 2));
+
+      - name: Append flaky issues history (idempotent per day)
+        run: |
+          set -e
+          file=docs/flaky-issues.json
+          hist=docs/flaky-issues-history.json
+          mkdir -p docs
+          today=$(TZ=America/New_York date +%F)
+          count=$(jq '.issues | length' "$file")
+          [[ -f "$hist" ]] || echo '[]' > "$hist"
+          # if today's entry exists, replace; else append
+          tmp=$(mktemp)
+          jq --arg d "$today" --argjson c "$count" '
+            reduce .[] as $it ( []; if $it.date == $d then . else . + [$it] end )
+            + [{ "date": $d, "count": $c }]
+            | sort_by(.date)
+          ' "$hist" > "$tmp"
+          mv "$tmp" "$hist"
+      - run: npm run roadmap:build
+      - name: Commit roadmap.html
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "ci-bot"
+            git config user.email "ci@example.com"
+            git add docs/roadmap.html docs/flaky-issues.json docs/flaky-issues-history.json
+                        git commit -m "docs: update flaky issues + trend + dashboard [skip ci]"
+            git push
+          fi
+      - name: Commit changes
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "ci-bot"
+            git config user.email "ci@example.com"
+            git add index.md docs/burndown-history.md
+            git commit -m "chore: update burndown + history [skip ci]"
+            git push
+          fi

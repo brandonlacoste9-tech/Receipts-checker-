@@ -1,0 +1,37 @@
+name: Burndown Guard
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [ main ]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: node -v && npm -v
+      - name: Install (noop ok)
+        run: npm ci || true
+      - name: Compare burndown vs base
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          # Set WARN_THRESHOLD to "-1" to allow a 1% drop before failing
+          WARN_THRESHOLD: "-0"
+          ALLOW_DROP: "false"
+        run: node scripts/check-burndown.js
+      - name: Comment result
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          recreate: true
+          header: burndown-guard
+          message: |
+            **Burndown Guard**
+            - Base: `${{ github.base_ref }}`
+            - Head: `${{ github.head_ref }}`
+            - See workflow logs for the detailed delta.

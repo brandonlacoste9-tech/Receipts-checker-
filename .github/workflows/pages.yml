@@ -1,0 +1,107 @@
+name: Docs → GitHub Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths: [ "docs/**", ".github/workflows/pages.yml" ]
+  workflow_run:
+    workflows: [ "Playwright Tests" ]   # ← must match your test workflow name
+    types: [ completed ]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  gather-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # download playwright-json artifact from triggering run (if present)
+      - name: Download playwright-json artifact
+        if: ${{ github.event.workflow_run.conclusion != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const run_id = context.payload.workflow_run?.id;
+            if (!run_id) { core.info('No workflow_run context.'); return; }
+            const arts = await github.rest.actions.listWorkflowRunArtifacts({owner, repo, run_id});
+            const art = arts.data.artifacts.find(a => a.name === 'playwright-json');
+            if (!art) { core.info('No playwright-json artifact found.'); return; }
+            const dl = await github.rest.actions.downloadArtifact({owner, repo, artifact_id: art.id, archive_format: 'zip'});
+            require('fs').writeFileSync('playwright-json.zip', Buffer.from(dl.data));
+
+      - name: Unzip artifact
+        if: hashFiles('playwright-json.zip') != ''
+        run: unzip -o playwright-json.zip -d artifacts || true
+
+      # build ci-matrix.json (tolerant if no artifact)
+      - name: Parse Playwright → docs/ci-matrix.json
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const p = 'artifacts/playwright-report.json';
+          const suites = ['Smoke','Regression','Visual'];
+          const browsers = ['chromium','firefox','webkit','mobile'];
+          const matrix = Object.fromEntries(suites.map(s=>[s,Object.fromEntries(browsers.map(b=>[b,'pending']))]));
+
+          if (fs.existsSync(p)) {
+            try {
+              const rpt = JSON.parse(fs.readFileSync(p,'utf8'));
+              const byProject = {};
+              (rpt.suites||[]).forEach(S=> (S.suites||[]).forEach(su=> (su.tests||[]).forEach(t=> {
+                (t.results||[]).forEach(r=>{
+                  const name = (r.projectName||t.projectName||'').toLowerCase();
+                  if(!name) return;
+                  const st = (r.status==='passed')?'pass':(r.status==='failed')?'fail':'pending';
+                  // once fail, keep fail
+                  byProject[name] = (byProject[name]==='fail') ? 'fail' : st;
+                })
+              })));
+              suites.forEach(s=>browsers.forEach(b=>{ if(byProject[b]) matrix[s][b]=byProject[b]; }));
+            } catch(e){ console.log('parse error:', e.message); }
+          }
+          if (!fs.existsSync('docs')) fs.mkdirSync('docs', {recursive:true});
+          fs.writeFileSync('docs/ci-matrix.json', JSON.stringify(matrix,null,2));
+          console.log('ci-matrix.json:', JSON.stringify(matrix,null,2));
+          EOF
+
+      # render CI badges → docs/CI_STATUS.md
+      - name: Render CI badges → docs/CI_STATUS.md
+        env:
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const m = JSON.parse(fs.readFileSync('docs/ci-matrix.json','utf8'));
+          const suites = ['Smoke','Regression','Visual'];
+          const browsers = ['chromium','firefox','webkit','mobile'];
+          const color = s => s==='pass'?'brightgreen': s==='fail'?'red':'lightgrey';
+          const label = (s,b) => `${s.toLowerCase()}--${b}`;
+          const runUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.RUN_ID}`;
+          const badge = (s,b,st) => `[![${s} ${b}](https://img.shields.io/badge/${encodeURIComponent(label(s,b))}-${encodeURIComponent(st)}-${color(st)})](${runUrl})`;
+          const header = `| Suite        | Chromium | Firefox | WebKit | Mobile |
+|--------------|----------|---------|--------|--------|`;
+          const rows = suites.map(s => `| ${s.padEnd(12)} | ${browsers.map(b=>badge(s,b,(m[s]||{})[b]||'pending')).join(' | ')} |`).join('\n');
+          const table = [header, rows].join('\n');
+          let src = '# ✅ CI Status Overview\n\n<!-- BADGES_START -->\n\n<!-- BADGES_END -->\n\n---\n_Auto-updated from Playwright results._\n';
+          try { src = fs.readFileSync('docs/CI_STATUS.md','utf8'); } catch {}
+          const start='<!-- BADGES_START -->', end='<!-- BADGES_END -->';
+          const out = src.replace(new RegExp(`${start}[\\s\\S]*?${end}`,'m'), `${start}\n\n${table}\n\n${end}`);
+          fs.writeFileSync('docs/CI_STATUS.md', out);
+          EOF
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: docs }
+      - uses: actions/deploy-pages@v4
