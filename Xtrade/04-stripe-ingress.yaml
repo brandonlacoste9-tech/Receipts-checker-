@@ -1,0 +1,43 @@
+# Kubernetes Ingress for Stripe Webhook
+# Replace <YOUR-DOMAIN> with your actual domain
+# Apply with: kubectl apply -f 04-stripe-ingress.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: polymarket-arb-ingress
+  namespace: arbitrage
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod   # If using cert-manager
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx   # Adjust based on your ingress controller
+  tls:
+    - hosts:
+        - arb.YOUR-DOMAIN.com
+      secretName: polymarket-arb-tls
+  rules:
+    - host: arb.YOUR-DOMAIN.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: polymarket-arb
+                port:
+                  number: 8000
+          - path: /stripe/webhook
+            pathType: Exact
+            backend:
+              service:
+                name: polymarket-arb
+                port:
+                  number: 8000
+---
+# After applying this Ingress:
+# 1. Wait for the external IP/domain to be ready
+# 2. Go to Stripe Dashboard → Developers → Webhooks
+# 3. Add endpoint: https://arb.YOUR-DOMAIN.com/stripe/webhook
+# 4. Select events to listen for (e.g., checkout.session.completed)
+# 5. Copy the webhook signing secret and update 02-k8s-secrets.yaml

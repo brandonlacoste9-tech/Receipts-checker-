@@ -1,0 +1,5 @@
+apiVersion: v2
+name: openclaw
+description: Polymarket Arbitrage Service with Ollama sidecar
+version: 0.1.0
+appVersion: "1.0"
