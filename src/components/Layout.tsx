@@ -3,7 +3,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { Home, Camera, History, TrendingUp, Settings, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { useStore } from '../store';
-import { motion, AnimatePresence } from 'framer-motion';
 
 interface LayoutProps {
   children: ReactNode;
@@ -37,62 +36,55 @@ export default function Layout({ children }: LayoutProps) {
       </button>
 
       {/* Sidebar */}
-      <AnimatePresence>
-        {(mobileMenuOpen || window.innerWidth >= 1024) && (
-          <motion.aside
-            initial={{ x: -300 }}
-            animate={{ x: 0 }}
-            exit={{ x: -300 }}
-            className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-white/10 bg-primary-bg p-6 lg:translate-x-0"
-          >
-            {/* Logo */}
-            <Link to="/" className="mb-8 block">
-              <h1 className="text-2xl font-bold text-primary-accent">ReceiptAI</h1>
-              <p className="text-xs text-gray-500">Your receipts don't lie</p>
-            </Link>
+      <aside className={`fixed left-0 top-0 z-40 h-screen w-64 border-r border-white/10 bg-primary-bg p-6 transition-transform duration-300 ${
+        mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+      } lg:translate-x-0`}>
+        {/* Logo */}
+        <Link to="/" className="mb-8 block">
+          <h1 className="text-2xl font-bold text-primary-accent">ReceiptAI</h1>
+          <p className="text-xs text-gray-500">Your receipts don't lie</p>
+        </Link>
 
-            {/* Navigation */}
-            <nav className="space-y-2">
-              {navigation.map((item) => {
-                const Icon = item.icon;
-                const isActive = location.pathname === item.href;
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 rounded-lg px-4 py-3 transition-colors ${
-                      isActive
-                        ? 'bg-primary-accent/20 text-primary-accent'
-                        : 'text-gray-400 hover:bg-white/5 hover:text-white'
-                    }`}
-                  >
-                    <Icon className="h-5 w-5" />
-                    <span className="font-medium">{item.name}</span>
-                  </Link>
-                );
-              })}
-            </nav>
+        {/* Navigation */}
+        <nav className="space-y-2">
+          {navigation.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.href;
+            return (
+              <Link
+                key={item.name}
+                to={item.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-3 rounded-lg px-4 py-3 transition-colors ${
+                  isActive
+                    ? 'bg-primary-accent/20 text-primary-accent'
+                    : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+                <span className="font-medium">{item.name}</span>
+              </Link>
+            );
+          })}
+        </nav>
 
-            {/* User Profile */}
-            <div className="absolute bottom-6 left-6 right-6">
-              <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-accent text-sm font-bold text-primary-bg">
-                    {userProfile.avatar}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-white">{userProfile.name}</p>
-                    <p className="text-xs text-gray-400">
-                      {userProfile.isPro ? 'Pro Member' : 'Free'}
-                    </p>
-                  </div>
-                </div>
+        {/* User Profile */}
+        <div className="absolute bottom-6 left-6 right-6">
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-accent text-sm font-bold text-primary-bg">
+                {userProfile.avatar}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-white">{userProfile.name}</p>
+                <p className="text-xs text-gray-400">
+                  {userProfile.isPro ? 'Pro Member' : 'Free'}
+                </p>
               </div>
             </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      </aside>
 
       {/* Main Content */}
       <main className="lg:ml-64">

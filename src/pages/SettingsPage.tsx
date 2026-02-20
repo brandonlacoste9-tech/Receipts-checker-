@@ -158,7 +158,6 @@ export default function SettingsPage() {
               <select className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-primary-accent focus:outline-none">
                 <option value="US">United States</option>
                 <option value="CA">Canada</option>
-                <option value="QC">Quebec</option>
                 <option value="UK">United Kingdom</option>
               </select>
             </div>
