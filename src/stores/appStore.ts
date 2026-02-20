@@ -25,10 +25,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   setCurrentReceipt: (receipt) => set({ currentReceipt: receipt }),
   
-  scanReceipt: async (file: File) => {
+  scanReceipt: async (_file: File) => {
     set({ isScanning: true });
     try {
-      const receipt = await mockDataService.scanReceipt(file);
+      const receipt = await mockDataService.scanReceipt();
       set({ currentReceipt: receipt, isScanning: false });
       return receipt;
     } catch (error) {

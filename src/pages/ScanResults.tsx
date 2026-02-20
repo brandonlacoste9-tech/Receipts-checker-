@@ -4,6 +4,7 @@ import { ArrowLeft, Share2, AlertTriangle, Download } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import { mockDataService } from '../services/mockData';
 import { generateShareableCard, downloadImage, shareToTwitter } from '../utils/shareUtils';
+import { showToast } from '../utils/toast';
 import { useState } from 'react';
 
 export const ScanResults = () => {
@@ -52,7 +53,7 @@ export const ScanResults = () => {
 
   const handleAddToHistory = () => {
     addReceipt(receipt);
-    alert('Receipt added to history!');
+    showToast('Receipt added to history!');
   };
 
   return (

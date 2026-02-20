@@ -33,7 +33,7 @@ export const Settings = () => {
                   PRO
                 </span>
               )}
-              <span className="text-sm text-gray-400">Joined {userProfile.joinedDate}</span>
+              <span className="text-sm text-gray-400">Joined {new Date(userProfile.joinedDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}</span>
             </div>
           </div>
           <button className="bg-white/10 hover:bg-white/20 px-6 py-2 rounded-lg font-semibold transition-colors">

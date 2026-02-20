@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Flame, AlertTriangle, X } from 'lucide-react';
 import { mockDataService } from '../services/mockData';
+import { showToast } from '../utils/toast';
 
 export const Insights = () => {
   const subscriptions = mockDataService.getSubscriptions();
@@ -108,7 +109,7 @@ export const Insights = () => {
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
                       className="bg-red-500/20 text-red-400 p-3 rounded-lg hover:bg-red-500/30 transition-colors"
-                      onClick={() => alert(`Cancellation link for ${sub.name} would open here`)}
+                      onClick={() => showToast(`Cancellation link for ${sub.name} would open here`, 'info')}
                     >
                       <X className="w-5 h-5" />
                     </motion.button>

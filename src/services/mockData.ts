@@ -142,7 +142,7 @@ const mockUserProfile: UserProfile = {
   name: 'Alex Chen',
   email: 'alex.chen@email.com',
   avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex',
-  joinedDate: 'January 2024',
+  joinedDate: '2024-01-15T00:00:00.000Z',
   isPro: true,
 };
 
